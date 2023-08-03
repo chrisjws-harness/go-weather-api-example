@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gorilla/mux"
 	harness "github.com/harness/ff-golang-server-sdk/client"
@@ -49,17 +48,33 @@ func getWeatherData(city string, apiKey string, geography ...string) (*WeatherDa
 	return &weatherData, nil
 }
 
-func weatherHandler(w http.ResponseWriter, r *http.Request, apiKey string) {
+func weatherHandler(w http.ResponseWriter, r *http.Request, apiKey string, ff_client harness.CfClient) {
 	city := r.FormValue("city")
 	if city == "" {
 		http.Error(w, "City not specified", http.StatusBadRequest)
 		return
 	}
 
+	target := evaluation.Target{
+		Identifier: "user1",
+		Name:       "user1",
+		Attributes: &map[string]interface{}{"location": "usa"},
+	}
+
+	resultBool, err := ff_client.BoolVariation(flagName, &target, false)
+	if err != nil {
+		log.Fatal("failed to get evaluation: ", err)
+	}
+	log.Printf("Flag variation %v\n", resultBool)
 	geo := r.Header.Get("geography")
 	if geo != "imperial" && geo != "metric" {
-		geo = "imperial"
+		if resultBool == true {
+			geo = "imperial"
+		} else {
+			geo = "metric"
+		}
 	}
+	fmt.Println(geo)
 
 	weatherData, err := getWeatherData(city, apiKey, geo)
 	if err != nil {
@@ -90,30 +105,9 @@ func main() {
 	}
 	defer func() { client.Close() }()
 
-	target := evaluation.Target{
-		Identifier: "golangsdk",
-		Name:       "GolangSDK",
-		Attributes: &map[string]interface{}{"location": "emea"},
-	}
-
-	// Loop forever reporting the state of the flag
-	x := 0
-	for {
-		resultBool, err := client.BoolVariation(flagName, &target, false)
-		if err != nil {
-			log.Fatal("failed to get evaluation: ", err)
-		}
-		log.Printf("Flag variation %v\n", resultBool)
-		time.Sleep(10 * time.Second)
-		x = x + 1
-		if x > 10 {
-			break
-		}
-	}
-
 	r := mux.NewRouter()
 	r.HandleFunc("/weather", func(w http.ResponseWriter, r *http.Request) {
-		weatherHandler(w, r, apiKey)
+		weatherHandler(w, r, apiKey, *client)
 	}).Methods("GET")
 
 	http.Handle("/", r)
