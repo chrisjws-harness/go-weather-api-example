@@ -55,6 +55,10 @@ func weatherHandler(w http.ResponseWriter, r *http.Request, apiKey string, ff_cl
 		return
 	}
 
+	loc := r.Header.Get("user-location")
+	username := r.Header.Get("whoami")
+
+	fmt.Println(loc, username)
 	target := evaluation.Target{
 		Identifier: "user1",
 		Name:       "user1",
