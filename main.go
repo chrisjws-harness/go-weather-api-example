@@ -4,10 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gorilla/mux"
+	harness "github.com/harness/ff-golang-server-sdk/client"
+	"github.com/harness/ff-golang-server-sdk/evaluation"
+)
+
+var (
+	flagName string = "default_imperial"
+	apiKeyFF string = os.Getenv("FF_API_KEY")
 )
 
 type WeatherData struct {
@@ -74,6 +83,34 @@ func main() {
 		fmt.Println("Error: OpenWeatherMap API key not provided.")
 		return
 	}
+
+	client, err := harness.NewCfClient(apiKeyFF)
+	if err != nil {
+		log.Fatalf("could not connect to CF servers %s\n", err)
+	}
+	defer func() { client.Close() }()
+
+	target := evaluation.Target{
+		Identifier: "golangsdk",
+		Name:       "GolangSDK",
+		Attributes: &map[string]interface{}{"location": "emea"},
+	}
+
+	// Loop forever reporting the state of the flag
+	x := 0
+	for {
+		resultBool, err := client.BoolVariation(flagName, &target, false)
+		if err != nil {
+			log.Fatal("failed to get evaluation: ", err)
+		}
+		log.Printf("Flag variation %v\n", resultBool)
+		time.Sleep(10 * time.Second)
+		x = x + 1
+		if x > 10 {
+			break
+		}
+	}
+
 	r := mux.NewRouter()
 	r.HandleFunc("/weather", func(w http.ResponseWriter, r *http.Request) {
 		weatherHandler(w, r, apiKey)
